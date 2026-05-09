@@ -171,7 +171,6 @@ function updateDashboard() {
     return;
   }
 
-  let html = '';
   let allReady = true;
   let anyPlaying = false;
 
@@ -181,73 +180,100 @@ function updateDashboard() {
 
     let stateClass = `state-${c.state}`;
     let stateLabel = c.state ? c.state.toUpperCase() : 'UNKNOWN';
-
     if (isStale) { stateClass = 'state-connecting'; stateLabel = 'ZOMBIE'; }
+    
     if (c.state !== 'ready' && c.state !== 'playing') allReady = false;
     if (c.state === 'playing') anyPlaying = true;
 
+    // Buscar o crear la fila del cliente
+    let tr = tbody.querySelector(`tr[data-id="${c.id}"]`);
+    if (!tr) {
+      tr = document.createElement('tr');
+      tr.dataset.id = c.id;
+      // Estructura base de celdas
+      tr.innerHTML = `
+        <td class="cell-id"></td>
+        <td class="cell-state"></td>
+        <td class="cell-offset"></td>
+        <td class="cell-rtt"></td>
+        <td class="cell-conf"></td>
+        <td class="cell-samples"></td>
+        <td class="cell-drift"></td>
+        <td class="cell-pos"></td>
+        <td class="cell-adjust"></td>
+        <td class="cell-auto"></td>
+      `;
+      tbody.appendChild(tr);
 
-    // Drift display
+      // Agregar eventos una sola vez al crear la fila
+      const adjustCell = tr.querySelector('.cell-adjust');
+      adjustCell.innerHTML = `
+        <div style="display:flex; gap:2px;">
+           <input type="number" class="seek-input" value="0" style="width:40px; font-size:0.7em; background:#222; color:#fff; border:1px solid #444; border-radius:3px; padding:2px;">
+           <button class="btn-seek-manual" style="font-size:0.7em; padding:2px 4px; cursor:pointer; background:#bb86fc; color:#000; border:none; border-radius:3px; font-weight:bold;">Seek</button>
+        </div>
+      `;
+      
+      const autoCell = tr.querySelector('.cell-auto');
+      autoCell.innerHTML = `<input type="checkbox" class="toggle-auto" title="Auto-Sync Drift">`;
+
+      // Evento Seek
+      adjustCell.querySelector('.btn-seek-manual').addEventListener('click', () => {
+        const input = adjustCell.querySelector('.seek-input');
+        const deltaMs = parseInt(input.value, 10);
+        if (isNaN(deltaMs)) return;
+        ws.send('manual_seek', { targetClientId: c.id, deltaMs });
+      });
+
+      // Evento Auto-Sync
+      autoCell.querySelector('.toggle-auto').addEventListener('change', (e) => {
+        ws.send('toggle_auto_sync', { targetClientId: c.id });
+      });
+    }
+
+    // ACTUALIZACIÓN QUIRÚRGICA DE CELDAS
+    tr.querySelector('.cell-id').innerHTML = `<pre>${c.id.substring(0,6)}</pre>`;
+    tr.querySelector('.cell-state').innerHTML = `<span class="status-badge ${stateClass}">${stateLabel}</span>`;
+    tr.querySelector('.cell-offset').innerHTML = `<pre>${c.syncOffset.toFixed(1)}ms</pre>`;
+    tr.querySelector('.cell-rtt').innerHTML = `<pre>${c.bestRtt.toFixed(1)}ms</pre>`;
+    tr.querySelector('.cell-conf').textContent = `${(c.confidence * 100).toFixed(0)}%`;
+    tr.querySelector('.cell-samples').textContent = c.samples || 0;
+
+    // Drift
     const driftVal = c.lastDriftMs || 0;
     const absDrift = Math.abs(driftVal);
-    let driftColor, driftLabel;
-    if (absDrift < 15) {
-      driftColor = '#55efc4'; driftLabel = 'OK';
-    } else if (absDrift < 100) {
-      driftColor = '#fdcb6e'; driftLabel = `${driftVal > 0 ? '+' : ''}${driftVal}ms`;
-    } else {
-      driftColor = '#ff7675'; driftLabel = `${driftVal > 0 ? '+' : ''}${driftVal}ms`;
-    }
-    const driftHtml = c.isPlaying
-      ? `<span style="color:${driftColor}; font-weight: bold;">${driftLabel}</span>`
+    let driftColor = absDrift < 15 ? '#55efc4' : (absDrift < 100 ? '#fdcb6e' : '#ff7675');
+    let driftLabel = absDrift < 15 ? 'OK' : `${driftVal > 0 ? '+' : ''}${driftVal}ms`;
+    tr.querySelector('.cell-drift').innerHTML = c.isPlaying 
+      ? `<span style="color:${driftColor}; font-weight: bold;">${driftLabel}</span>` 
       : '<span style="opacity:0.3">—</span>';
 
-    // Position: raw seconds + samples
+    // Posición
     const rawPos = c.currentPositionSec || 0;
     const rawSample = c.currentSample || 0;
-    const posDisplay = c.isPlaying
+    tr.querySelector('.cell-pos').innerHTML = c.isPlaying
       ? `<span style="font-size:0.85em">${rawPos.toFixed(2)}s<br><span style="opacity:0.5">s${rawSample}</span></span>`
       : '<span style="opacity:0.3">—</span>';
 
-    // Manual adjust input + button
-    const adjustHtml = c.isPlaying
-      ? `<div style="display:flex; gap:2px;">
-           <input type="number" class="seek-input" data-id="${c.id}" value="0" style="width:40px; font-size:0.7em; background:#222; color:#fff; border:1px solid #444; border-radius:3px; padding:2px;">
-           <button class="btn-seek-manual" data-id="${c.id}" style="font-size:0.7em; padding:2px 4px; cursor:pointer; background:#bb86fc; color:#000; border:none; border-radius:3px; font-weight:bold;">Seek</button>
-         </div>`
-      : '';
-
-    html += `
-      <tr>
-        <td><pre>${c.id.substring(0,6)}</pre></td>
-        <td><span class="status-badge ${stateClass}">${stateLabel}</span></td>
-        <td><pre>${c.syncOffset.toFixed(1)}ms</pre></td>
-        <td><pre>${c.bestRtt.toFixed(1)}ms</pre></td>
-        <td>${(c.confidence * 100).toFixed(0)}%</td>
-        <td>${c.samples || 0}</td>
-        <td>${driftHtml}</td>
-        <td>${posDisplay}</td>
-        <td>${adjustHtml}</td>
-      </tr>
-    `;
+    // Inputs (Solo actualizar si NO tienen el foco y el valor cambió)
+    const seekInput = tr.querySelector('.seek-input');
+    if (document.activeElement !== seekInput && !c.isPlaying) {
+      seekInput.value = 0; // Reset si no está reproduciendo
+    }
+    
+    const autoCheckbox = tr.querySelector('.cell-auto .toggle-auto');
+    const serverAutoSync = c.autoSync !== false;
+    if (autoCheckbox.checked !== serverAutoSync) {
+      autoCheckbox.checked = serverAutoSync;
+    }
   });
 
-  tbody.innerHTML = html;
-
-  // Event delegation for manual seek button
-  tbody.querySelectorAll('.btn-seek-manual').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetId = btn.dataset.id;
-      const input = tbody.querySelector(`.seek-input[data-id="${targetId}"]`);
-      const deltaMs = parseInt(input.value, 10);
-      if (isNaN(deltaMs)) return;
-      
-      console.log(`Manual seek: ${targetId.substring(0,6)} ${deltaMs}ms`);
-      ws.send(JSON.stringify({
-        type: 'manual_seek',
-        payload: { targetClientId: targetId, deltaMs }
-      }));
-    });
+  // Limpiar filas de clientes que ya no están
+  const currentIds = roomData.clients.map(c => c.id);
+  tbody.querySelectorAll('tr').forEach(tr => {
+    if (tr.dataset.id && !currentIds.includes(tr.dataset.id)) {
+      tr.remove();
+    }
   });
 
   // Room indicator & buttons

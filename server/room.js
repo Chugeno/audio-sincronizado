@@ -23,6 +23,8 @@ export function addClient(clientId, ws, role) {
     currentPositionSec: 0,
     currentSample: 0,
     isPlaying: false,
+    autoSync: true, // Por defecto activado
+    lastCorrectionTime: 0,
     lastSeen: Date.now()
   });
 }

@@ -131,17 +131,38 @@ function handleMessage(clientId, ws, msg) {
 
         console.log(`  ↳ DRIFT ${shortId}: actual=${actualSpeakerPosSec.toFixed(3)}s expected=${expectedSpeakerPosSec.toFixed(3)}s drift=${driftMs}ms hwLat=${(hwLatencySec*1000).toFixed(0)}ms`);
 
-        if (Math.abs(driftMs) > 30 && ws.readyState === 1) {
-          console.log(`  ⚡ CORREGIR ${shortId}: ${driftMs}ms`);
-          ws.send(JSON.stringify({
-            type: 'drift_correct',
-            payload: { driftMs }
-          }));
+        if (client.autoSync !== false) {
+          // Cooldown: no corregir si corregimos hace menos de 2 segundos
+          const timeSinceLastCorrect = serverNow - (client.lastCorrectionTime || 0);
+          
+          if (Math.abs(driftMs) > 30 && timeSinceLastCorrect > 2000 && ws.readyState === 1) {
+            console.log(`  ⚡ CORREGIR ${shortId}: ${driftMs}ms`);
+            client.lastCorrectionTime = serverNow; // Guardar tiempo local del server
+            ws.send(JSON.stringify({
+              type: 'drift_correct',
+              payload: { driftMs }
+            }));
+          }
+        } else {
+          console.log(`  ⏸️ ${shortId}: Auto-sync desactivado (drift=${driftMs}ms)`);
         }
       } else if (room.state === 'playing' && payload.isPlaying) {
         console.log(`  ⚠️ ${shortId}: pos=${payload.currentPositionSec} (no drift calc: pos<=0 o sin playTargetTime)`);
       }
       break;
+
+    case 'toggle_auto_sync': {
+      const targetClientId = payload.targetClientId;
+      const targetClient = room.clients.get(targetClientId);
+      if (targetClient) {
+        // Si no está definido, asumimos que era true. Lo invertimos.
+        const currentVal = targetClient.autoSync !== false;
+        targetClient.autoSync = !currentVal;
+        console.log(`⚙️ AUTO-SYNC ${targetClientId.substring(0,6)}: ${targetClient.autoSync}`);
+        broadcastRoomStateToDirectors();
+      }
+      break;
+    }
 
     case 'manual_seek': {
       // El admin envía un ajuste manual para un dispositivo específico
@@ -225,6 +246,7 @@ export function broadcastRoomStateToDirectors() {
       currentSample: c.currentSample || 0,
       isPlaying: c.isPlaying || false,
       lastDriftMs: c.lastDriftMs || 0,
+      autoSync: c.autoSync !== false,
     }));
 
   broadcastToDirectors({
