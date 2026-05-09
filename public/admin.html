@@ -44,8 +44,14 @@
 
     <!-- MONITOR DE DISPOSITIVOS -->
     <div class="panel monitor">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>Monitor de Músicos</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <h2>Monitor de Músicos</h2>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-disable-auto-all" style="font-size: 0.8rem; padding: 4px 8px; background: #e74c3c; border: none; border-radius: 4px; color: white; cursor: pointer;">Apagar Todos los Auto-Sync</button>
+            <button id="btn-sync-all-now" style="font-size: 0.8rem; padding: 4px 8px; background: #f39c12; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">Forzar Ajuste (Todos)</button>
+          </div>
+        </div>
         <div id="room-status-indicator" class="status-badge state-connecting">Buscando Músicos...</div>
       </div>
       

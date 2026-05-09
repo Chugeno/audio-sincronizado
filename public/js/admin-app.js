@@ -8,6 +8,9 @@ const statusEl = document.getElementById('connection-status');
 const tbody = document.getElementById('clients-tbody');
 const btnPlay = document.getElementById('btn-play');
 const btnStop = document.getElementById('btn-stop');
+const btnDisableAutoAll = document.getElementById('btn-disable-auto-all');
+const btnSyncAllNow = document.getElementById('btn-sync-all-now');
+
 const roomStatusInd = document.getElementById('room-status-indicator');
 const delaySlider = document.getElementById('delay-slider');
 const delayVal = document.getElementById('delay-val');
@@ -89,6 +92,19 @@ btnStop.addEventListener('click', () => {
   ws.send('cmd_stop', {});
   telemetryData.clear();
   addLogEntry('🎬 DIRECTOR', 'STOP enviado', 'warn');
+});
+
+// Global Sync Controls
+btnDisableAutoAll?.addEventListener('click', () => {
+  if (confirm('¿Seguro que querés desactivar el auto-ajuste para todos los músicos?')) {
+    ws.send('disable_auto_sync_all', {});
+    addLogEntry('🎬 DIRECTOR', 'Enviado comando: Apagar Auto-Sync global', 'warn');
+  }
+});
+
+btnSyncAllNow?.addEventListener('click', () => {
+  ws.send('force_sync_all', {});
+  addLogEntry('🎬 DIRECTOR', 'Enviado comando: Forzar ajuste a todos los músicos', 'good');
 });
 
 // --- File Upload ---

@@ -165,7 +165,6 @@ function handleMessage(clientId, ws, msg) {
     }
 
     case 'manual_seek': {
-      // El admin envía un ajuste manual para un dispositivo específico
       const targetClientId = payload.targetClientId;
       const seekDeltaMs = payload.deltaMs;
       const targetClient = room.clients.get(targetClientId);
@@ -176,6 +175,34 @@ function handleMessage(clientId, ws, msg) {
           payload: { driftMs: seekDeltaMs }
         }));
       }
+      break;
+    }
+
+    case 'disable_auto_sync_all': {
+      console.log(`🛑 APAGANDO AUTO-SYNC PARA TODOS LOS CLIENTES`);
+      room.clients.forEach(c => {
+        if (c.role === 'musician') {
+          c.autoSync = false;
+        }
+      });
+      broadcastRoomStateToDirectors();
+      break;
+    }
+
+    case 'force_sync_all': {
+      console.log(`⚡ FORZANDO AJUSTE DE SINCRONIZACIÓN GLOBAL`);
+      room.clients.forEach(c => {
+        if (c.role === 'musician' && c.isPlaying && c.lastDriftMs && Math.abs(c.lastDriftMs) > 10) {
+          if (c.ws && c.ws.readyState === 1) {
+            console.log(`  → Enviando seek a ${c.ws._clientId || 'client'} de ${c.lastDriftMs}ms`);
+            c.lastCorrectionTime = getServerTime(); // Reseteamos su cooldown también
+            c.ws.send(JSON.stringify({
+              type: 'drift_correct',
+              payload: { driftMs: c.lastDriftMs }
+            }));
+          }
+        }
+      });
       break;
     }
 
