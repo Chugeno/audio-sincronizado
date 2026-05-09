@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncOrchestra - Director</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+  <div class="dashboard">
+    <div class="header">
+      <h1>🎬 SyncOrchestra Director</h1>
+      <div id="connection-status">🔴 Desconectado</div>
+    </div>
+
+    <div class="controls-section">
+      <!-- PANEL DE AUDIO -->
+      <div class="panel">
+        <h2>1. Preparar Audio</h2>
+        <p id="current-audio">Track actual: Ninguno</p>
+        <div class="upload-area" id="drop-zone">
+          <p>Arrastra un archivo MP3 aquí o haz clic para seleccionar</p>
+          <input type="file" id="file-input" accept="audio/mpeg, audio/mp3">
+        </div>
+        <p id="upload-status" style="font-size: 0.9rem; margin-top: 1rem; color: #7f8c8d;"></p>
+      </div>
+
+      <!-- PANEL DE DISPARO -->
+      <div class="panel">
+        <h2>2. Disparar (Orquestar)</h2>
+        <div class="playback-controls">
+          <button id="btn-play" class="btn-play" disabled>▶ PLAY AL UNÍSONO</button>
+          <button id="btn-stop" class="btn-stop" disabled>■ STOP</button>
+        </div>
+        <div class="delay-setting">
+          <label for="delay-slider">Margen de preparación: <span id="delay-val">2000</span>ms</label>
+          <input type="range" id="delay-slider" min="500" max="5000" step="100" value="2000">
+          <p style="font-size: 0.8rem; color: #7f8c8d;">Tiempo extra dado a los teléfonos para prepararse antes del Play.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MONITOR DE DISPOSITIVOS -->
+    <div class="panel monitor">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Monitor de Músicos</h2>
+        <div id="room-status-indicator" class="status-badge state-connecting">Buscando Músicos...</div>
+      </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Estado</th>
+            <th>Offset NTP</th>
+            <th>RTT</th>
+            <th>Confianza</th>
+            <th>Muestras</th>
+            <th>Drift</th>
+            <th>Posición</th>
+            <th>Ajuste</th>
+          </tr>
+        </thead>
+        <tbody id="clients-tbody">
+          <tr><td colspan="7" style="text-align: center;">Sin músicos conectados</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TELEMETRÍA EN VIVO -->
+    <div class="panel telemetry-panel">
+      <h2>📊 Telemetría en Vivo</h2>
+      
+      <!-- Timeline del último Play -->
+      <div id="play-timeline" style="display:none;">
+        <h3>Cronología del último PLAY</h3>
+        <div id="timeline-content" class="timeline"></div>
+      </div>
+
+      <!-- Log en vivo -->
+      <div class="telemetry-log">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+          <h3>Log de Eventos</h3>
+          <button id="btn-clear-log" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;">Limpiar</button>
+        </div>
+        <div id="event-log" class="event-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/admin-app.js"></script>
+</body>
+</html>

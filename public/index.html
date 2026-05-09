@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SyncOrchestra - Músico</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/musician.css">
+</head>
+<body class="state-disconnected">
+
+  <!-- BOTÓN REFRESCAR FLOTANTE -->
+  <button id="btn-refresh" class="btn-refresh-float">↻</button>
+
+  <!-- Hack para mantener pantalla encendida -->
+  <video id="no-sleep-video" loop playsinline muted style="position:absolute; width:1px; height:1px; opacity:0;"></video>
+
+  <!-- VISTAS -->
+  <div id="view-disconnected" class="view active">
+    <h1>SyncOrchestra</h1>
+    <p>Conectando al director...</p>
+    <div class="spinner" style="margin-top: 2rem;"></div>
+  </div>
+
+  <div id="view-load-prompt" class="view">
+    <h1 id="display-track-name" style="font-size: 1.2rem; color: #00ffcc; margin-bottom: 20px;">Esperando Track...</h1>
+    <p>Presiona el botón para descargar el audio.</p>
+    <button id="btn-load-audio" class="primary" style="margin-top: 1rem;">Cargar Audio</button>
+    <button id="btn-fullscreen" style="margin-top: 20px; background: none; border: 1px solid #555; color: #888; font-size: 0.8rem; padding: 5px 10px; border-radius: 4px;">Pantalla Completa ⛶</button>
+  </div>
+
+  <div id="view-loading" class="view">
+    <h1>Cargando...</h1>
+    <p id="loading-text">Descargando archivo a la memoria</p>
+    <div class="progress-container">
+      <div id="loading-bar" class="progress-bar"></div>
+    </div>
+  </div>
+
+  <div id="view-syncing" class="view">
+    <div class="pulse-icon">⏱️</div>
+    <h1>Sincronizando</h1>
+    <p>Ajustando el reloj interno al milisegundo...</p>
+  </div>
+
+  <div id="view-ready" class="view">
+    <div class="pulse-icon" style="animation: none;">✅</div>
+    <h1>¡Listo!</h1>
+    <p>Esperando la señal del director.</p>
+    <span id="wake-lock-status" style="display: none; margin-top: 10px; font-size: 0.8rem; opacity: 0.6;">☀️ Pantalla Activa</span>
+  </div>
+
+  <div id="view-playing" class="view">
+    <div class="waves">
+      <div class="wave"></div>
+      <div class="wave"></div>
+      <div class="wave"></div>
+      <div class="wave"></div>
+      <div class="wave"></div>
+    </div>
+    <h1>Al Aire</h1>
+    <p id="playing-position" style="font-family: monospace; font-size: 1.5rem;">0:00</p>
+  </div>
+
+  <!-- PANEL DE DEBUG PERMANENTE (Al fondo) -->
+  <div id="permanent-debug" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 340px; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); padding: 12px; border-radius: 12px; font-family: monospace; font-size: 0.7rem; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; line-height: 1.6;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px;">
+      <span style="color: #bb86fc; font-weight: bold;">ID: <span id="display-client-id">...</span></span>
+      <span id="display-drift-live" style="color: #888;"></span>
+    </div>
+    <div>Sync: <span id="sync-samples-count">0</span> muestras | <span id="sync-confidence">0</span>% conf | RTT <span id="sync-rtt">?</span>ms | <span id="sync-purity" style="color:#888">0%</span> pureza</div>
+    <div style="margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+      <div>ctxTime: <span id="dbg-ctx-time">-</span></div>
+      <div>startAt: <span id="dbg-start-at">-</span></div>
+      <div>pos: <span id="dbg-position">-</span>s | sample: <span id="dbg-sample">-</span></div>
+      <div>corrections: <span id="dbg-corrections">0</span></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/musician-app.js"></script>
+</body>
+</html>

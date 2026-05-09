@@ -1,0 +1,201 @@
+/* public/css/admin.css */
+
+body {
+  background-color: #1a1a2e;
+  color: #e0e0e0;
+  padding: 1.5rem;
+  overflow-y: auto;
+  align-items: flex-start;
+  display: block;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+h1 { color: #fff; margin: 0; font-size: 1.5rem; }
+h2 { margin-top: 0; font-size: 1.1rem; color: #8ab4f8; }
+h3 { font-size: 0.95rem; color: #bb86fc; margin: 1rem 0 0.5rem; }
+
+.controls-section {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.panel {
+  background: rgba(255,255,255,0.05);
+  padding: 1.2rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  flex: 1;
+}
+
+/* Upload */
+.upload-area {
+  border: 2px dashed rgba(255,255,255,0.15);
+  border-radius: 6px;
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.upload-area:hover { border-color: #8ab4f8; }
+.upload-area input { display: none; }
+.upload-area p { margin: 0; font-size: 0.9rem; opacity: 0.7; }
+
+/* Buttons */
+button {
+  padding: 0.7rem 1.2rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+button:disabled { opacity: 0.35; cursor: not-allowed; }
+button:active:not(:disabled) { transform: scale(0.97); }
+
+.btn-play { background: #2ecc71; color: white; }
+.btn-stop { background: #e74c3c; color: white; }
+
+.playback-controls {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.delay-setting { margin-top: 1.2rem; }
+.delay-setting label { font-size: 0.9rem; }
+.delay-setting input { width: 100%; margin-top: 0.5rem; }
+
+/* Monitor Table */
+.monitor table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.monitor th, .monitor td {
+  padding: 0.6rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.monitor th {
+  background: rgba(255,255,255,0.03);
+  color: #8ab4f8;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.monitor td pre {
+  margin: 0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.85rem;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+}
+.state-connecting { background: #636e72; color: white; }
+.state-loading { background: #d63031; color: white; }
+.state-syncing { background: #fdcb6e; color: black; }
+.state-ready { background: #00b894; color: white; }
+.state-playing { background: #00cec9; color: black; }
+
+/* Telemetry Panel */
+.telemetry-panel { margin-top: 1.5rem; }
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0.8rem;
+  background: rgba(0,0,0,0.3);
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.timeline-event {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.timeline-event .ts {
+  color: #636e72;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.timeline-event .label {
+  color: #dfe6e9;
+}
+
+.timeline-event .value {
+  color: #74b9ff;
+  font-weight: bold;
+}
+
+.timeline-event.warn .value { color: #fdcb6e; }
+.timeline-event.good .value { color: #55efc4; }
+.timeline-event.bad .value { color: #ff7675; }
+
+/* Event Log */
+.event-log {
+  max-height: 300px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.3);
+  border-radius: 6px;
+  padding: 0.8rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.log-entry {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  padding: 2px 0;
+}
+.log-entry .log-ts { color: #636e72; }
+.log-entry .log-client { color: #a29bfe; }
+.log-entry .log-msg { color: #dfe6e9; }
+.log-entry .log-val { color: #74b9ff; }
+
+/* Position bar */
+.pos-bar-container {
+  width: 80px;
+  height: 6px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.pos-bar {
+  height: 100%;
+  background: #00cec9;
+  border-radius: 3px;
+  transition: width 0.4s linear;
+}

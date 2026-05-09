@@ -1,0 +1,80 @@
+/* public/css/common.css */
+
+:root {
+  --bg-disconnected: #1a1a1a;
+  --bg-loading: #d32f2f;
+  --bg-syncing: #fbc02d;
+  --bg-ready: #fbc02d; /* Yellow to Green transition happens via class */
+  --bg-playing: #388e3c;
+  
+  --text-light: #ffffff;
+  --text-dark: #121212;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.5s ease;
+  background-color: var(--bg-disconnected);
+  color: var(--text-light);
+}
+
+body.state-disconnected { background-color: var(--bg-disconnected); color: var(--text-light); }
+body.state-loading { background-color: var(--bg-loading); color: var(--text-light); }
+body.state-syncing { background-color: var(--bg-syncing); color: var(--text-dark); }
+body.state-ready { background-color: var(--bg-ready); color: var(--text-dark); }
+body.state-playing { background-color: var(--bg-playing); color: var(--text-light); }
+
+.view {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+}
+
+.view.active {
+  display: flex;
+  animation: fadeIn 0.3s ease;
+}
+
+h1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+p {
+  font-size: 1.2rem;
+  opacity: 0.9;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* UI Elements */
+button.primary {
+  background: white;
+  color: black;
+  border: none;
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  border-radius: 50px;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.1s;
+}
+
+button.primary:active {
+  transform: scale(0.95);
+}

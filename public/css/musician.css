@@ -1,0 +1,176 @@
+/* public/css/musician.css */
+
+/* Botón de Refrescar flotante — visible siempre, oculto en Al Aire */
+.btn-refresh-float {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: white;
+  font-size: 1.4rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.btn-refresh-float:active {
+  transform: scale(0.9) rotate(180deg);
+  background: rgba(255,255,255,0.2);
+}
+
+/* Ocultar el botón de refrescar durante "Al Aire" */
+body.state-playing .btn-refresh-float {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.5);
+}
+
+
+/* Spinner para loading */
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 2rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Progress bar */
+.progress-container {
+  width: 80%;
+  max-width: 300px;
+  height: 10px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 5px;
+  margin-top: 2rem;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: white;
+  width: 0%;
+  transition: width 0.1s;
+}
+
+/* Pulso para syncing */
+.pulse-icon {
+  width: 80px;
+  height: 80px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,0,0,0.2); }
+  70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(0,0,0,0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+}
+
+/* Ondas para playing */
+.waves {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 2rem;
+  height: 60px;
+}
+
+.wave {
+  width: 10px;
+  height: 100%;
+  background: white;
+  border-radius: 5px;
+  animation: wave 1s ease-in-out infinite;
+}
+
+.wave:nth-child(2) { animation-delay: 0.1s; }
+.wave:nth-child(3) { animation-delay: 0.2s; }
+.wave:nth-child(4) { animation-delay: 0.3s; }
+.wave:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes wave {
+  0%, 100% { height: 20%; }
+  50% { height: 100%; }
+}
+
+/* Slider de Offset */
+.fine-tune {
+  position: absolute;
+  bottom: 2rem;
+  width: 80%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fine-tune label {
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+  opacity: 0.8;
+}
+
+.fine-tune input[type=range] {
+  width: 100%;
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.fine-tune input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.3);
+  border-radius: 2px;
+}
+
+body.state-syncing .fine-tune input[type=range]::-webkit-slider-runnable-track,
+body.state-ready .fine-tune input[type=range]::-webkit-slider-runnable-track {
+  background: rgba(0,0,0,0.2);
+}
+
+.fine-tune input[type=range]::-webkit-slider-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+body.state-syncing .fine-tune input[type=range]::-webkit-slider-thumb,
+body.state-ready .fine-tune input[type=range]::-webkit-slider-thumb {
+  background: #121212;
+}
+
+.offset-val {
+  font-family: monospace;
+  margin-top: 5px;
+  font-size: 1.1rem;
+}
