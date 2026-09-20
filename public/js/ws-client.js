@@ -24,8 +24,9 @@ export class WsClient {
       console.log('[WS] Conectado.');
       this.reconnectAttempts = 0;
       
-      // Enviar mensaje inicial de join
-      this.send('join', { role: this.role });
+      // Enviar mensaje inicial de join con el offset de usuario guardado
+      const savedOffset = parseInt(localStorage.getItem('syncorchestra_user_offset'), 10) || 0;
+      this.send('join', { role: this.role, userOffsetMs: savedOffset });
       
       this.emit('open');
       this.startHeartbeat();

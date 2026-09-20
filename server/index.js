@@ -6,8 +6,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { setupWsHandler } from './ws-handler.js';
-import { room } from './room.js';
+import { setupWsHandler } from './signaling.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,9 +53,8 @@ app.post('/api/upload', upload.single('audioFile'), (req, res) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
   
-  // Guardamos el nombre en el estado de la sala
-  room.audioFile = req.file.filename;
-  room.audioDisplayName = req.file.originalname;
+  // El archivo se sube temporalmente al servidor (o se puede servir directamente desde P2P luego).
+  // Por ahora solo devolvemos la ruta exitosa sin estado global.
   
   res.json({ 
     success: true, 

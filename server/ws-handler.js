@@ -1,12 +1,30 @@
 // server/ws-handler.js
 import { nanoid } from 'nanoid';
+import os from 'os';
 import { room, addClient, removeClient, updateClientState, broadcastToDirectors, broadcastToMusicians } from './room.js';
 import { getServerTime } from './sync-clock.js';
+
+function getLocalIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Filtrar IPv4 y no interna (localhost)
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
 
 export function setupWsHandler(ws, req) {
   const clientId = nanoid(10);
 
   addClient(clientId, ws, 'musician');
+  // Auto-sync del servidor desactivado por defecto.
+  // El cliente se auto-corrige vía median filter. El servidor es sólo respaldo de emergencia.
+  const clientState = room.clients.get(clientId);
+  if (clientState) clientState.autoSync = false;
 
   ws.on('pong', () => {
     updateClientState(clientId, { lastSeen: Date.now() });
@@ -37,7 +55,8 @@ export function setupWsHandler(ws, req) {
       clientId,
       audioFile: room.audioFile,
       audioDisplayName: room.audioDisplayName,
-      serverTime: getServerTime()
+      serverTime: getServerTime(),
+      serverIp: getLocalIp()
     }
   }));
 }
@@ -49,6 +68,8 @@ function handleMessage(clientId, ws, msg) {
     case 'join':
       if (payload.role === 'director') {
         updateClientState(clientId, { role: 'director' });
+      } else {
+        updateClientState(clientId, { userOffsetMs: payload.userOffsetMs || 0 });
       }
       broadcastRoomStateToDirectors();
       break;
@@ -120,9 +141,12 @@ function handleMessage(clientId, ws, msg) {
       if (room.state === 'playing' && room.playTargetTime && payload.isPlaying && payload.currentPositionSec > 0) {
         const serverNow = getServerTime();
         const client = room.clients.get(clientId);
-        const halfRttSec = ((client?.bestRtt || 10) / 2) / 1000;
-
-        const expectedSpeakerPosSec = (serverNow - room.playTargetTime) / 1000 - halfRttSec;
+        
+        // Si el cliente nos manda su hora local sincornizada exacta (clientNow), no hay latencia de red.
+        // Si no (código viejo), usamos la hora del servidor menos el RTT de viaje.
+        const snapshotTime = payload.clientNow || (serverNow - ((client?.bestRtt || 10) / 2));
+        const expectedSpeakerPosSec = (snapshotTime - room.playTargetTime) / 1000;
+        
         const hwLatencySec = (payload.hwLatencyMs || 0) / 1000;
         const actualSpeakerPosSec = payload.currentPositionSec - hwLatencySec;
         const driftMs = Math.round((actualSpeakerPosSec - expectedSpeakerPosSec) * 1000);
@@ -131,20 +155,30 @@ function handleMessage(clientId, ws, msg) {
 
         console.log(`  ↳ DRIFT ${shortId}: actual=${actualSpeakerPosSec.toFixed(3)}s expected=${expectedSpeakerPosSec.toFixed(3)}s drift=${driftMs}ms hwLat=${(hwLatencySec*1000).toFixed(0)}ms`);
 
-        if (client.autoSync !== false) {
-          // Cooldown: no corregir si corregimos hace menos de 2 segundos
-          const timeSinceLastCorrect = serverNow - (client.lastCorrectionTime || 0);
+        // Auto-Sync Inicial: a los 500ms de arrancar el tema, forzamos un ajuste automático una sola vez
+        // para que el celular aprenda su delay inmediatamente sin necesidad de usar el botón manual.
+        if (actualSpeakerPosSec >= 0.5 && !client.initialSyncDone && Math.abs(driftMs) > 10 && ws.readyState === 1) {
+          console.log(`  🚀 AUTO-SYNC INICIAL ${shortId} a los ${actualSpeakerPosSec.toFixed(2)}s: ${driftMs}ms`);
+          client.initialSyncDone = true;
+          client.lastCorrectionTime = serverNow;
+          ws.send(JSON.stringify({
+            type: 'drift_correct',
+            payload: { driftMs }
+          }));
+        }
+
+        // Auto-sync del servidor: respaldo de emergencia (500ms)
+        // El auto-corrector del cliente (median filter) maneja drifts pequeños.
+        // El servidor solo interviene si hay una desviación catastrófica.
+        const timeSinceLastCorrect = serverNow - (client.lastCorrectionTime || 0);
           
-          if (Math.abs(driftMs) > 30 && timeSinceLastCorrect > 2000 && ws.readyState === 1) {
-            console.log(`  ⚡ CORREGIR ${shortId}: ${driftMs}ms`);
-            client.lastCorrectionTime = serverNow; // Guardar tiempo local del server
-            ws.send(JSON.stringify({
-              type: 'drift_correct',
-              payload: { driftMs }
-            }));
-          }
-        } else {
-          console.log(`  ⏸️ ${shortId}: Auto-sync desactivado (drift=${driftMs}ms)`);
+        if (Math.abs(driftMs) > 500 && timeSinceLastCorrect > 5000 && ws.readyState === 1) {
+          console.log(`  ⚡ EMERGENCIA ${shortId}: ${driftMs}ms`);
+          client.lastCorrectionTime = serverNow;
+          ws.send(JSON.stringify({
+            type: 'drift_correct',
+            payload: { driftMs }
+          }));
         }
       } else if (room.state === 'playing' && payload.isPlaying) {
         console.log(`  ⚠️ ${shortId}: pos=${payload.currentPositionSec} (no drift calc: pos<=0 o sin playTargetTime)`);
@@ -189,6 +223,51 @@ function handleMessage(clientId, ws, msg) {
       break;
     }
 
+    case 'set_calibration': {
+      const targetClientId = payload.targetClientId;
+      const offsetMs = payload.offsetMs;
+      const targetClient = room.clients.get(targetClientId);
+      
+      if (targetClient) {
+        targetClient.userOffsetMs = offsetMs; // Guardar en el servidor para que el Admin lo vea
+        console.log(`🔧 SET CALIBRATION → ${targetClientId.substring(0,6)}: ${offsetMs}ms`);
+        
+        if (targetClient.ws && targetClient.ws.readyState === 1) {
+          targetClient.ws.send(JSON.stringify({
+            type: 'set_calibration',
+            payload: { offsetMs }
+          }));
+        }
+        broadcastRoomStateToDirectors();
+      }
+      break;
+    }
+
+    case 'cmd_auto_calibrate': {
+      const targetClientId = payload.targetClientId;
+      const targetClient = room.clients.get(targetClientId);
+      
+      if (targetClient && targetClient.ws && targetClient.ws.readyState === 1) {
+        // Schedule 2 seconds in the future
+        const delayMs = 2000;
+        const serverSentAt = getServerTime();
+        const targetTime = serverSentAt + delayMs;
+        
+        // Command the client to play the calibration mp3
+        targetClient.ws.send(JSON.stringify({
+          type: 'play_calibration_mp3',
+          payload: { targetTime, serverSentAt }
+        }));
+        
+        // Notify the admin to start listening for that target time
+        ws.send(JSON.stringify({
+          type: 'calibration_started',
+          payload: { targetClientId, targetTime }
+        }));
+      }
+      break;
+    }
+
     case 'force_sync_all': {
       console.log(`⚡ FORZANDO AJUSTE DE SINCRONIZACIÓN GLOBAL`);
       room.clients.forEach(c => {
@@ -213,6 +292,12 @@ function handleMessage(clientId, ws, msg) {
       room.playTargetTime = serverSentAt + delayMs;
       room.state = 'playing';
       room.lastPlaySentAt = serverSentAt;
+
+      room.clients.forEach(c => {
+        if (c.role === 'musician') {
+          c.initialSyncDone = false;
+        }
+      });
 
       broadcastToMusicians({
         type: 'play',
@@ -274,6 +359,7 @@ export function broadcastRoomStateToDirectors() {
       isPlaying: c.isPlaying || false,
       lastDriftMs: c.lastDriftMs || 0,
       autoSync: c.autoSync !== false,
+      userOffsetMs: c.userOffsetMs || 0,
     }));
 
   broadcastToDirectors({

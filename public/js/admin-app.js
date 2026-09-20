@@ -1,7 +1,10 @@
 // public/js/admin-app.js
 import { WsClient } from './ws-client.js';
+import { HostRTCManager } from './rtc-host.js';
 
+const roomId = 'sala' + Math.floor(Math.random() * 10000);
 const ws = new WsClient();
+const hostRtc = new HostRTCManager(ws, roomId);
 
 // UI Elements
 const statusEl = document.getElementById('connection-status');
@@ -23,15 +26,40 @@ const timelineContent = document.getElementById('timeline-content');
 const eventLog = document.getElementById('event-log');
 const btnClearLog = document.getElementById('btn-clear-log');
 
-// State
+// State P2P Local
 let roomData = { clients: [], state: 'idle' };
 let playAcks = new Map();   // clientId → play_ack telemetry
 let telemetryData = new Map(); // clientId → latest telemetry
 
-// --- WebSocket Events ---
+// Generar estado de sala simulando al servidor anterior
+setInterval(() => {
+  const clients = [];
+  telemetryData.forEach((data, id) => {
+    clients.push({
+      id: id,
+      state: data.state || 'connecting',
+      syncOffset: data.syncOffset || 0,
+      bestRtt: hostRtc.rtts.get(id) || 0,
+      confidence: data.confidence || 0,
+      samples: data.samples || 0,
+      isPlaying: data.isPlaying || false,
+      currentPositionSec: data.currentPositionSec || 0,
+      currentSample: data.currentSample || 0,
+      lastDriftMs: data.lastDriftMs || 0,
+      userOffsetMs: data.userOffsetMs || 0,
+      autoSync: data.autoSync !== false,
+      lastSeen: Date.now()
+    });
+  });
+  roomData.clients = clients;
+  updateDashboard();
+}, 500);
+
+// --- WebSocket Events (Señalización) ---
 ws.on('open', () => {
-  statusEl.textContent = '🟢 Conectado';
+  statusEl.textContent = '🟢 Conectado al Signaling';
   statusEl.style.color = '#2ecc71';
+  ws.send('join_room', { roomId, role: 'director' });
 });
 
 ws.on('close', () => {
@@ -41,41 +69,78 @@ ws.on('close', () => {
   btnStop.disabled = true;
 });
 
-ws.on('room_state', (payload) => {
-  roomData = payload;
-  updateDashboard();
+ws.on('welcome', (payload) => {
+  addLogEntry('ADMIN', `Señalización lista. Sala: ${roomId}`, 'ok');
+
+  const currentHost = window.location.hostname;
+  const protocol = window.location.protocol;
+  const port = window.location.port ? `:${window.location.port}` : '';
+  const connectionUrl = `${protocol}//${currentHost}${port}/?room=${roomId}`;
+
+  const linkEl = document.getElementById('connection-link');
+  if (linkEl) {
+    linkEl.href = connectionUrl;
+    linkEl.textContent = connectionUrl.replace(/^https?:\/\//, '');
+  }
+
+  const qrContainer = document.getElementById('qrcode');
+  if (qrContainer) {
+    qrContainer.innerHTML = ''; 
+    try {
+      new QRCode(qrContainer, {
+        text: connectionUrl,
+        width: 120,
+        height: 120,
+        colorDark: "#1a1a2e",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch (e) {
+      console.error("Error QR:", e);
+    }
+  }
 });
 
-ws.on('play_dispatched', (payload) => {
-  // Server tells us: "I sent play at this time with this target"
-  playAcks.clear();
-  addLogEntry('🎬 DIRECTOR', `PLAY enviado. Target: +${payload.delayMs}ms en el futuro`, 'good');
-  addLogEntry('🎬 DIRECTOR', `Server timestamp al enviar: ${payload.serverSentAt.toFixed(2)}`, '');
-  addLogEntry('🎬 DIRECTOR', `Target timestamp: ${payload.targetTime.toFixed(2)}`, '');
-  renderTimeline(payload);
+// Eventos del Signaling para WebRTC
+ws.on('musician_joined', (payload) => hostRtc.createPeer(payload.clientId));
+ws.on('webrtc_answer', (payload) => hostRtc.handleAnswer(payload.fromClientId, payload.sdp));
+ws.on('webrtc_ice_candidate', (payload) => hostRtc.handleIceCandidate(payload.fromClientId, payload.candidate));
+ws.on('musician_left', (payload) => {
+    hostRtc.removePeer(payload.clientId);
+    telemetryData.delete(payload.clientId);
 });
 
-ws.on('play_ack', (payload) => {
-  playAcks.set(payload.clientId, payload);
-  const delayStr = payload.delayToTargetMs.toFixed(1);
-  const rttStr = payload.syncRttBest >= 0 ? payload.syncRttBest.toFixed(1) : '?';
-  const hwStr = payload.hwLatencyMs.toFixed(1);
-  const offsetStr = payload.syncOffset.toFixed(1);
-  const confStr = (payload.syncConfidence * 100).toFixed(0);
-
-  addLogEntry(`📱 ${payload.clientId}`, `ACK recibido`, 'good');
-  addLogEntry(`📱 ${payload.clientId}`, `  Delay hasta target: ${delayStr}ms | Mejor RTT: ${rttStr}ms`, '');
-  addLogEntry(`📱 ${payload.clientId}`, `  HW Latency: ${hwStr}ms | User Offset: ${payload.userOffsetMs}ms`, '');
-  addLogEntry(`📱 ${payload.clientId}`, `  Sync Offset: ${offsetStr}ms | Confianza: ${confStr}%`, '');
-  addLogEntry(`📱 ${payload.clientId}`, `  Scheduled AudioCtx time: ${payload.scheduledCtxTime.toFixed(4)}s`, '');
-
-  updateTimelineWithAcks();
-});
-
-ws.on('telemetry', (payload) => {
-  telemetryData.set(payload.clientId, payload);
-  // Update table is handled by room_state + merge
-});
+// Eventos de los DataChannels WebRTC
+hostRtc.onPeerConnected = (clientId) => {
+  addLogEntry('P2P', `Conexión Directa OK con Músico ${clientId.substring(0,6)}`, 'good');
+};
+hostRtc.onPeerDisconnected = (clientId) => {
+  addLogEntry('P2P', `Músico desconectado: ${clientId.substring(0,6)}`, 'err');
+};
+hostRtc.onMessageReceived = (clientId, msg) => {
+  if (msg.type === 'telemetry') {
+    // Merge con data existente
+    const existing = telemetryData.get(clientId) || {};
+    telemetryData.set(clientId, { ...existing, ...msg.payload, lastSeen: Date.now() });
+  } else if (msg.type === 'play_ack') {
+    playAcks.set(clientId, msg.payload);
+    addLogEntry(`📱 ${clientId.substring(0,6)}`, `ACK: ${msg.payload.delayToTargetMs.toFixed(1)}ms de margen.`, 'ok');
+    updateTimelineWithAcks();
+  } else if (msg.type === 'ping_req') {
+     // El músico nos pide la hora exacta para sincronizar (NTP Huygens protocol)
+     const t2 = performance.now();
+     hostRtc.sendTo(clientId, {
+         type: 'sync_pong',
+         payload: {
+             t1: msg.payload.t1,
+             probeGroupId: msg.payload.probeGroupId,
+             probeGroupIndex: msg.payload.probeGroupIndex,
+             t2: t2,
+             t3: performance.now()
+         }
+     });
+  }
+};
 
 // --- Delay slider ---
 delaySlider.addEventListener('input', (e) => {
@@ -85,26 +150,34 @@ delaySlider.addEventListener('input', (e) => {
 // --- Control Buttons ---
 btnPlay.addEventListener('click', () => {
   const delayMs = parseInt(delaySlider.value, 10);
-  ws.send('cmd_play', { delayMs });
+  const now = performance.now();
+  const playCmd = {
+      type: 'cmd_play',
+      payload: { delayMs, serverSentAt: now, targetTime: now + delayMs }
+  };
+  
+  hostRtc.broadcast(playCmd);
+  
+  playAcks.clear();
+  addLogEntry('🎬 DIRECTOR', `PLAY enviado. Target: +${delayMs}ms en el futuro`, 'good');
+  renderTimeline(playCmd.payload);
 });
 
 btnStop.addEventListener('click', () => {
-  ws.send('cmd_stop', {});
-  telemetryData.clear();
-  addLogEntry('🎬 DIRECTOR', 'STOP enviado', 'warn');
+  hostRtc.broadcast({ type: 'cmd_stop', payload: {} });
+  addLogEntry('🎬 DIRECTOR', 'STOP enviado (WebRTC)', 'warn');
 });
 
 // Global Sync Controls
 btnDisableAutoAll?.addEventListener('click', () => {
-  if (confirm('¿Seguro que querés desactivar el auto-ajuste para todos los músicos?')) {
-    ws.send('disable_auto_sync_all', {});
-    addLogEntry('🎬 DIRECTOR', 'Enviado comando: Apagar Auto-Sync global', 'warn');
+  if (confirm('¿Seguro?')) {
+    hostRtc.broadcast({ type: 'disable_auto_sync_all', payload: {} });
   }
 });
 
 btnSyncAllNow?.addEventListener('click', () => {
-  ws.send('force_sync_all', {});
-  addLogEntry('🎬 DIRECTOR', 'Enviado comando: Forzar ajuste a todos los músicos', 'good');
+  hostRtc.broadcast({ type: 'force_sync_all', payload: {} });
+  addLogEntry('🎬 DIRECTOR', 'Comando: Forzar ajuste P2P a todos', 'good');
 });
 
 // --- File Upload ---
@@ -126,7 +199,7 @@ async function handleFileUpload(file) {
     uploadStatus.style.color = '#e74c3c';
     return;
   }
-  uploadStatus.textContent = '⏳ Subiendo audio...';
+  uploadStatus.textContent = '⏳ Subiendo audio al servidor de archivos...';
   uploadStatus.style.color = '#f39c12';
 
   const formData = new FormData();
@@ -135,13 +208,16 @@ async function handleFileUpload(file) {
     const res = await fetch('/api/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (res.ok) {
-      uploadStatus.textContent = '✅ Subido. Notificando...';
+      uploadStatus.textContent = '✅ Subido. Transmitiendo info...';
       uploadStatus.style.color = '#2ecc71';
-      ws.send('cmd_set_audio', { 
-        filename: data.filename, 
-        displayName: data.displayName 
+      roomData.audioDisplayName = file.name;
+      
+      // Enviar la ruta del MP3 a los músicos para que lo descarguen
+      hostRtc.broadcast({
+          type: 'cmd_set_audio',
+          payload: { filename: data.filename, displayName: file.name }
       });
-      addLogEntry('🎬 DIRECTOR', `Audio subido: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`, 'good');
+      addLogEntry('🎬 DIRECTOR', `Track listo para P2P: ${file.name}`, 'good');
     } else {
       throw new Error(data.error);
     }
@@ -151,35 +227,13 @@ async function handleFileUpload(file) {
   }
 }
 
-// --- Log ---
-btnClearLog.addEventListener('click', () => {
-  eventLog.innerHTML = '';
-});
-
-function addLogEntry(client, message, type) {
-  const now = new Date();
-  const ts = now.toLocaleTimeString('es-AR', { hour12: false }) + '.' + String(now.getMilliseconds()).padStart(3, '0');
-  const typeClass = type === 'good' ? 'style="color:#55efc4"' :
-                    type === 'warn' ? 'style="color:#fdcb6e"' :
-                    type === 'bad'  ? 'style="color:#ff7675"' : '';
-
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-ts">${ts}</span> <span class="log-client">${client}</span> <span class="log-msg" ${typeClass}>${message}</span>`;
-  eventLog.prepend(entry);
-
-  // Limitar a 200 entradas
-  while (eventLog.children.length > 200) {
-    eventLog.removeChild(eventLog.lastChild);
-  }
-}
-
+// --- Dashboard Render ---
 function updateDashboard() {
   const displayName = roomData.audioDisplayName || 'Ninguno';
   currentAudio.textContent = `Track: ${displayName}`;
 
   if (roomData.clients.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; opacity: 0.5;">Sin músicos conectados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; opacity: 0.5;">Sin músicos conectados P2P</td></tr>';
     roomStatusInd.className = 'status-badge state-connecting';
     roomStatusInd.textContent = 'Esperando Músicos...';
     btnPlay.disabled = true;
@@ -191,22 +245,16 @@ function updateDashboard() {
   let anyPlaying = false;
 
   roomData.clients.forEach(c => {
-    const timeSinceLastPing = Date.now() - c.lastSeen;
-    const isStale = timeSinceLastPing > 10000;
-
     let stateClass = `state-${c.state}`;
     let stateLabel = c.state ? c.state.toUpperCase() : 'UNKNOWN';
-    if (isStale) { stateClass = 'state-connecting'; stateLabel = 'ZOMBIE'; }
     
     if (c.state !== 'ready' && c.state !== 'playing') allReady = false;
     if (c.state === 'playing') anyPlaying = true;
 
-    // Buscar o crear la fila del cliente
     let tr = tbody.querySelector(`tr[data-id="${c.id}"]`);
     if (!tr) {
       tr = document.createElement('tr');
       tr.dataset.id = c.id;
-      // Estructura base de celdas
       tr.innerHTML = `
         <td class="cell-id"></td>
         <td class="cell-state"></td>
@@ -216,38 +264,36 @@ function updateDashboard() {
         <td class="cell-samples"></td>
         <td class="cell-drift"></td>
         <td class="cell-pos"></td>
+        <td class="cell-calib"></td>
         <td class="cell-adjust"></td>
         <td class="cell-auto"></td>
       `;
       tbody.appendChild(tr);
 
-      // Agregar eventos una sola vez al crear la fila
+      const calibCell = tr.querySelector('.cell-calib');
+      calibCell.innerHTML = `<input type="number" class="calib-input" value="0" step="10" style="width:45px;" title="Offset manual (ms)">`;
       const adjustCell = tr.querySelector('.cell-adjust');
       adjustCell.innerHTML = `
         <div style="display:flex; gap:2px;">
-           <input type="number" class="seek-input" value="0" style="width:40px; font-size:0.7em; background:#222; color:#fff; border:1px solid #444; border-radius:3px; padding:2px;">
-           <button class="btn-seek-manual" style="font-size:0.7em; padding:2px 4px; cursor:pointer; background:#bb86fc; color:#000; border:none; border-radius:3px; font-weight:bold;">Seek</button>
-        </div>
-      `;
-      
+           <input type="number" class="seek-input" value="0" style="width:40px;">
+           <button class="btn-seek-manual">Seek</button>
+        </div>`;
       const autoCell = tr.querySelector('.cell-auto');
       autoCell.innerHTML = `<input type="checkbox" class="toggle-auto" title="Auto-Sync Drift">`;
 
-      // Evento Seek
-      adjustCell.querySelector('.btn-seek-manual').addEventListener('click', () => {
-        const input = adjustCell.querySelector('.seek-input');
-        const deltaMs = parseInt(input.value, 10);
-        if (isNaN(deltaMs)) return;
-        ws.send('manual_seek', { targetClientId: c.id, deltaMs });
+      calibCell.querySelector('.calib-input').addEventListener('change', (e) => {
+        const offsetMs = parseInt(e.target.value, 10);
+        if (!isNaN(offsetMs)) hostRtc.sendTo(c.id, { type: 'set_calibration', payload: { offsetMs } });
       });
-
-      // Evento Auto-Sync
-      autoCell.querySelector('.toggle-auto').addEventListener('change', (e) => {
-        ws.send('toggle_auto_sync', { targetClientId: c.id });
+      adjustCell.querySelector('.btn-seek-manual').addEventListener('click', () => {
+        const deltaMs = parseInt(tr.querySelector('.seek-input').value, 10);
+        if (!isNaN(deltaMs)) hostRtc.sendTo(c.id, { type: 'manual_seek', payload: { deltaMs } });
+      });
+      autoCell.querySelector('.toggle-auto').addEventListener('change', () => {
+        hostRtc.sendTo(c.id, { type: 'toggle_auto_sync', payload: {} });
       });
     }
 
-    // ACTUALIZACIÓN QUIRÚRGICA DE CELDAS
     tr.querySelector('.cell-id').innerHTML = `<pre>${c.id.substring(0,6)}</pre>`;
     tr.querySelector('.cell-state').innerHTML = `<span class="status-badge ${stateClass}">${stateLabel}</span>`;
     tr.querySelector('.cell-offset').innerHTML = `<pre>${c.syncOffset.toFixed(1)}ms</pre>`;
@@ -255,44 +301,24 @@ function updateDashboard() {
     tr.querySelector('.cell-conf').textContent = `${(c.confidence * 100).toFixed(0)}%`;
     tr.querySelector('.cell-samples').textContent = c.samples || 0;
 
-    // Drift
     const driftVal = c.lastDriftMs || 0;
     const absDrift = Math.abs(driftVal);
     let driftColor = absDrift < 15 ? '#55efc4' : (absDrift < 100 ? '#fdcb6e' : '#ff7675');
-    let driftLabel = absDrift < 15 ? 'OK' : `${driftVal > 0 ? '+' : ''}${driftVal}ms`;
     tr.querySelector('.cell-drift').innerHTML = c.isPlaying 
-      ? `<span style="color:${driftColor}; font-weight: bold;">${driftLabel}</span>` 
+      ? `<span style="color:${driftColor}; font-weight: bold;">${driftVal}ms</span>` 
       : '<span style="opacity:0.3">—</span>';
 
-    // Posición
     const rawPos = c.currentPositionSec || 0;
-    const rawSample = c.currentSample || 0;
     tr.querySelector('.cell-pos').innerHTML = c.isPlaying
-      ? `<span style="font-size:0.85em">${rawPos.toFixed(2)}s<br><span style="opacity:0.5">s${rawSample}</span></span>`
+      ? `<span style="font-size:0.85em">${rawPos.toFixed(2)}s</span>`
       : '<span style="opacity:0.3">—</span>';
-
-    // Inputs (Solo actualizar si NO tienen el foco y el valor cambió)
-    const seekInput = tr.querySelector('.seek-input');
-    if (document.activeElement !== seekInput && !c.isPlaying) {
-      seekInput.value = 0; // Reset si no está reproduciendo
-    }
-    
-    const autoCheckbox = tr.querySelector('.cell-auto .toggle-auto');
-    const serverAutoSync = c.autoSync !== false;
-    if (autoCheckbox.checked !== serverAutoSync) {
-      autoCheckbox.checked = serverAutoSync;
-    }
   });
 
-  // Limpiar filas de clientes que ya no están
   const currentIds = roomData.clients.map(c => c.id);
   tbody.querySelectorAll('tr').forEach(tr => {
-    if (tr.dataset.id && !currentIds.includes(tr.dataset.id)) {
-      tr.remove();
-    }
+    if (tr.dataset.id && !currentIds.includes(tr.dataset.id)) tr.remove();
   });
 
-  // Room indicator & buttons
   if (anyPlaying) {
     roomStatusInd.className = 'status-badge state-playing';
     roomStatusInd.textContent = '▶ EN EL AIRE';
@@ -306,66 +332,41 @@ function updateDashboard() {
   } else {
     roomStatusInd.className = 'status-badge state-syncing';
     roomStatusInd.textContent = '⏳ PREPARÁNDOSE...';
-    // Allow play even if not all ready (might want to test)
     btnPlay.disabled = false;
     btnStop.disabled = true;
   }
 }
 
-// --- Timeline ---
+// --- Log Utilities ---
+btnClearLog.addEventListener('click', () => { eventLog.innerHTML = ''; });
+function addLogEntry(client, message, type) {
+  const now = new Date();
+  const ts = now.toLocaleTimeString('es-AR', { hour12: false }) + '.' + String(now.getMilliseconds()).padStart(3, '0');
+  const typeClass = type === 'good' ? 'color:#55efc4' : type === 'warn' ? 'color:#fdcb6e' : type === 'err' ? 'color:#ff7675' : '';
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-ts">${ts}</span> <span class="log-client">${client}</span> <span class="log-msg" style="${typeClass}">${message}</span>`;
+  eventLog.prepend(entry);
+  if (eventLog.children.length > 200) eventLog.removeChild(eventLog.lastChild);
+}
+
+// --- Timeline Render ---
 function renderTimeline(playData) {
   playTimeline.style.display = 'block';
   timelineContent.innerHTML = `
-    <div class="timeline-event">
-      <span class="ts">T+0ms</span>
-      <span class="label">Servidor envía PLAY</span>
-      <span class="value">(margen: ${playData.delayMs}ms)</span>
-    </div>
-    <div class="timeline-event">
-      <span class="ts">T+${playData.delayMs}ms</span>
-      <span class="label">🎯 TARGET: Todos deben sonar aquí</span>
-      <span class="value good">↓</span>
-    </div>
+    <div class="timeline-event"><span class="ts">T+0ms</span> <span class="label">Director P2P PLAY</span></div>
+    <div class="timeline-event"><span class="ts">T+${playData.delayMs}ms</span> <span class="label">🎯 TARGET P2P</span></div>
     <div id="timeline-acks"></div>
   `;
 }
-
 function updateTimelineWithAcks() {
   const container = document.getElementById('timeline-acks');
   if (!container) return;
-
-  let html = '<hr style="border-color: rgba(255,255,255,0.1); margin: 8px 0;">';
-  html += '<div style="color: #bb86fc; margin-bottom: 4px;">Respuestas de músicos:</div>';
-
+  let html = '<hr style="border-color: rgba(255,255,255,0.1); margin: 8px 0;"><div style="color: #bb86fc;">Acks P2P:</div>';
   for (const [clientId, ack] of playAcks.entries()) {
-    const quality = ack.delayToTargetMs > 100 ? 'good' :
-                    ack.delayToTargetMs > 0 ? 'warn' : 'bad';
-    const icon = quality === 'good' ? '✅' : quality === 'warn' ? '⚠️' : '❌';
-
-    html += `
-      <div class="timeline-event ${quality}">
-        <span class="ts">${icon} ${clientId.substring(0, 6)}</span>
-        <span class="label">Recibió orden con</span>
-        <span class="value">${ack.delayToTargetMs.toFixed(0)}ms de margen</span>
-      </div>
-      <div class="timeline-event">
-        <span class="ts"></span>
-        <span class="label" style="font-size:0.75rem; opacity:0.6;">
-          sync: ${ack.syncOffset.toFixed(1)}ms | rtt: ${ack.syncRttBest >= 0 ? ack.syncRttBest.toFixed(1) : '?'}ms | hw: ${ack.hwLatencyMs.toFixed(1)}ms | user: ${ack.userOffsetMs}ms
-        </span>
-      </div>
-    `;
+    html += `<div class="timeline-event good"><span class="ts">✅ ${clientId.substring(0, 6)}</span> <span class="value">Margen: ${ack.delayToTargetMs.toFixed(0)}ms</span></div>`;
   }
-
   container.innerHTML = html;
 }
 
-// --- Helpers ---
-function formatTime(sec) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-// --- Init ---
 ws.connect('director');

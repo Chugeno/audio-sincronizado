@@ -27,9 +27,20 @@
         <p id="upload-status" style="font-size: 0.9rem; margin-top: 1rem; color: #7f8c8d;"></p>
       </div>
 
+      <!-- PANEL DE CONEXIÓN (QR) -->
+      <div class="panel">
+        <h2>2. Conectar Músicos</h2>
+        <div class="qr-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin-top: 10px;">
+          <div id="qrcode" style="padding: 10px; background: white; border-radius: 8px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.3);"></div>
+          <a id="connection-link" href="#" target="_blank" style="font-size: 0.85rem; font-family: monospace; color: #8ab4f8; text-decoration: none; word-break: break-all; text-align: center; margin-top: 5px; font-weight: bold;">Cargando enlace...</a>
+          <p style="font-size: 0.75rem; color: #a0a0a0; text-align: center; margin: 2px 0 0 0;">Escaneá este QR con los teléfonos en la misma Wi-Fi para unirse.</p>
+        </div>
+      </div>
+
       <!-- PANEL DE DISPARO -->
       <div class="panel">
-        <h2>2. Disparar (Orquestar)</h2>
+        <h2>3. Disparar (Orquestar)</h2>
+
         <div class="playback-controls">
           <button id="btn-play" class="btn-play" disabled>▶ PLAY AL UNÍSONO</button>
           <button id="btn-stop" class="btn-stop" disabled>■ STOP</button>
@@ -47,7 +58,8 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <div style="display: flex; align-items: center; gap: 15px;">
           <h2>Monitor de Músicos</h2>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <div id="mic-status" style="display:none; color:#ff7675; font-size:0.9rem; font-weight:bold; animation: pulse 1s infinite; margin-right: 10px;">🎙️ Escuchando...</div>
             <button id="btn-disable-auto-all" style="font-size: 0.8rem; padding: 4px 8px; background: #e74c3c; border: none; border-radius: 4px; color: white; cursor: pointer;">Apagar Todos los Auto-Sync</button>
             <button id="btn-sync-all-now" style="font-size: 0.8rem; padding: 4px 8px; background: #f39c12; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">Forzar Ajuste (Todos)</button>
           </div>
@@ -64,10 +76,11 @@
             <th>RTT</th>
             <th>Confianza</th>
             <th>Muestras</th>
-            <th>Drift</th>
+            <th>Drift Actual</th>
             <th>Posición</th>
-            <th>Ajuste</th>
-            <th>Auto</th>
+            <th>Calibración Inicial</th>
+            <th>Seek Manual</th>
+            <th>Auto-Sync</th>
           </tr>
         </thead>
         <tbody id="clients-tbody">
@@ -97,6 +110,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script type="module" src="js/admin-app.js"></script>
 </body>
 </html>
